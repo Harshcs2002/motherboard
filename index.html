@@ -1,0 +1,1543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Motherboard Explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --pcb:#1B4332;--pcb-d:#0f2a1e;--pcb-l:#2D5A45;
+  --trace:#9B7A2E;--trace-b:#D4AF37;--gold:#FFD700;
+  --accent:#52B788;--bright:#95D5B2;--glow:#00FF88;
+  --red:#FF6B6B;--orange:#FF8C42;
+  --txt:#D8F3DC;--txt2:#95D5B2;
+  --panel:#080F0A;--pborder:#1f4030;
+}
+body{background:#060E09;color:var(--txt);font-family:'Rajdhani',sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+
+/* ── HEADER ─────────────────────────────── */
+header{
+  background:linear-gradient(90deg,#060E09,#0D2015,#060E09);
+  border-bottom:1px solid var(--pborder);
+  padding:10px 24px;display:flex;align-items:center;justify-content:space-between;
+  position:relative;flex-shrink:0;
+}
+header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--glow),transparent);opacity:.3;}
+.logo{font-family:'Orbitron',sans-serif;font-weight:900;font-size:1.15rem;
+  color:var(--glow);letter-spacing:3px;text-shadow:0 0 20px rgba(0,255,136,.5);}
+.logo span{color:var(--trace-b);}
+.mode-toggle{display:flex;background:#0D2015;border:1px solid var(--pborder);border-radius:6px;overflow:hidden;}
+.mode-btn{padding:8px 22px;background:transparent;border:none;color:var(--txt2);
+  font-family:'Orbitron',sans-serif;font-size:.65rem;font-weight:600;letter-spacing:2px;cursor:pointer;transition:all .3s;}
+.mode-btn.active{background:var(--glow);color:#060E09;}
+.hdr-sub{font-family:'Share Tech Mono',monospace;font-size:.65rem;color:var(--accent);opacity:.6;}
+
+/* ── LAYOUT ──────────────────────────────── */
+.app-layout{display:flex;flex:1;overflow:hidden;}
+.board-wrap{flex:1;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at center,#0D2015 0%,#060E09 70%);
+  padding:16px;position:relative;overflow:auto;}
+.board-wrap::before{content:'';position:absolute;inset:0;
+  background-image:linear-gradient(rgba(0,255,136,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,255,136,.025) 1px,transparent 1px);
+  background-size:28px 28px;pointer-events:none;}
+
+/* ── MOTHERBOARD ─────────────────────────── */
+.motherboard{
+  position:relative;width:820px;height:640px;flex-shrink:0;
+  background:var(--pcb);border-radius:6px;border:3px solid #0d1f16;
+  box-shadow:0 0 80px rgba(0,100,50,.25),0 0 160px rgba(0,50,25,.15),inset 0 0 40px rgba(0,0,0,.3);
+}
+.motherboard::before{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
+  background-image:linear-gradient(rgba(0,0,0,.08) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,0,0,.08) 1px,transparent 1px);
+  background-size:8px 8px;border-radius:4px;}
+
+/* PCB edge gold stripe */
+.motherboard::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
+  border:6px solid transparent;border-image:linear-gradient(135deg,#9B7A2E,#D4AF37,#9B7A2E,#D4AF37) 1;
+  border-radius:4px;opacity:.5;}
+
+/* ── SVG TRACES ──────────────────────────── */
+svg.traces{position:absolute;inset:0;z-index:2;pointer-events:none;width:100%;height:100%;}
+
+/* ── COMPONENT BASE ──────────────────────── */
+.comp{position:absolute;cursor:pointer;z-index:10;transition:filter .2s,transform .15s;}
+.comp:hover{z-index:50;}
+.comp.selected{z-index:60;}
+.comp.hov-glow:hover{filter:drop-shadow(0 0 8px var(--glow)) drop-shadow(0 0 16px rgba(0,255,136,.4));}
+
+/* quiz states */
+.comp.quiz-target{animation:quizPulse .9s ease-in-out infinite;z-index:70;}
+@keyframes quizPulse{
+  0%,100%{filter:drop-shadow(0 0 8px #FFD700) drop-shadow(0 0 20px #FF8C00);}
+  50%{filter:drop-shadow(0 0 16px #FFD700) drop-shadow(0 0 40px #FF8C00);}
+}
+.comp.flash-ok{animation:flashOk .5s ease-out;}
+@keyframes flashOk{0%{filter:drop-shadow(0 0 20px #00FF88);}100%{filter:none;}}
+.comp.flash-bad{animation:flashBad .5s ease-out;}
+@keyframes flashBad{0%{filter:drop-shadow(0 0 20px #FF4444);}100%{filter:none;}}
+
+/* selected glow for learn */
+.comp.active-comp{filter:drop-shadow(0 0 10px var(--glow)) drop-shadow(0 0 20px rgba(0,255,136,.5));z-index:60;}
+
+/* Mounting holes */
+.mount-hole{position:absolute;z-index:3;
+  width:14px;height:14px;border-radius:50%;
+  background:radial-gradient(circle at 40% 40%,#2a3a30,#0a1a10);
+  border:2px solid #8B6914;}
+
+/* ── COMPONENT SHAPES ────────────────────── */
+/* CPU Socket */
+.shape-cpu{
+  width:150px;height:150px;
+  background:linear-gradient(135deg,#111 0%,#222 50%,#111 100%);
+  border:3px solid var(--trace-b);border-radius:4px;
+  box-shadow:0 0 0 3px #0d0d0d,0 0 0 5px #5a4010,inset 0 0 20px rgba(0,0,0,.6);
+}
+.cpu-inner{
+  position:absolute;inset:15px;
+  background:repeating-linear-gradient(0deg,#0d0d0d 0,#0d0d0d 1px,#1a1a1a 1px,#1a1a1a 4px),
+    repeating-linear-gradient(90deg,#0d0d0d 0,#0d0d0d 1px,#1a1a1a 1px,#1a1a1a 4px);
+  border:2px solid #333;
+}
+.cpu-label{position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);
+  font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--trace-b);white-space:nowrap;}
+.cpu-triangle{position:absolute;top:5px;left:5px;
+  width:0;height:0;border:7px solid transparent;border-top-color:var(--gold);border-left-color:var(--gold);}
+
+/* DIMM Slot */
+.shape-dimm{
+  width:22px;height:185px;
+  background:linear-gradient(180deg,#0d0d0d 0%,#1a1a1a 10%,#1f1f1f 50%,#1a1a1a 90%,#0d0d0d 100%);
+  border:2px solid #444;border-radius:2px;
+  box-shadow:inset 0 0 6px rgba(0,0,0,.5);
+  position:relative;
+}
+.shape-dimm::before{content:'';position:absolute;left:50%;top:8%;bottom:8%;
+  width:1px;background:linear-gradient(180deg,transparent,var(--trace-b) 30%,var(--trace-b) 70%,transparent);
+  transform:translateX(-50%);}
+.shape-dimm.a1,.shape-dimm.a2{border-color:#FF6B35;box-shadow:0 0 6px rgba(255,107,53,.2),inset 0 0 6px rgba(0,0,0,.5);}
+.shape-dimm.b1,.shape-dimm.b2{border-color:#4EA8DE;box-shadow:0 0 6px rgba(78,168,222,.2),inset 0 0 6px rgba(0,0,0,.5);}
+
+/* PCIe slot */
+.shape-pcie{
+  height:24px;
+  background:linear-gradient(180deg,#050505 0%,#111 40%,#1a1a1a 60%,#111 100%);
+  border:2px solid #555;border-radius:2px;position:relative;
+}
+.shape-pcie::after{content:'';position:absolute;top:50%;left:6px;right:6px;height:3px;
+  background:repeating-linear-gradient(90deg,var(--trace-b) 0,var(--trace-b) 2px,transparent 2px,transparent 5px);
+  transform:translateY(-50%);}
+.shape-pcie.x16{border-color:var(--trace-b);box-shadow:0 0 8px rgba(212,175,55,.25);}
+.shape-pcie.x1{border-color:#555;}
+.pcie-latch{position:absolute;right:-4px;top:50%;transform:translateY(-50%);
+  width:6px;height:10px;background:#555;border-radius:2px;}
+.pcie-latch.gold{background:var(--trace-b);}
+
+/* ATX Power 24-pin */
+.shape-atx{
+  width:46px;height:200px;
+  background:linear-gradient(90deg,#0d0d1a 0%,#1a1a2e 50%,#0d0d1a 100%);
+  border:2px solid #3a3a5a;border-radius:3px;
+  display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:4px;
+}
+.pin-hole{background:#020208;border-radius:2px;border:1px solid #2a2a3a;}
+
+/* CPU 8-pin Power */
+.shape-8pin{
+  width:68px;height:42px;
+  background:linear-gradient(180deg,#0d0d1a 0%,#1a1a2e 50%,#0d0d1a 100%);
+  border:2px solid #3a3a5a;border-radius:3px;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:4px;
+}
+
+/* Chipset */
+.shape-chipset{
+  width:80px;height:80px;
+  background:linear-gradient(135deg,#080808 0%,#111 50%,#080808 100%);
+  border:2px solid #444;position:relative;
+}
+.chipset-inner{position:absolute;inset:6px;
+  background:repeating-linear-gradient(45deg,#080808 0,#080808 2px,#0f0f0f 2px,#0f0f0f 4px);
+  border:1px solid #2a2a2a;}
+.chipset-pins{position:absolute;bottom:-3px;left:4px;right:4px;height:3px;
+  background:repeating-linear-gradient(90deg,var(--trace-b) 0,var(--trace-b) 1px,transparent 1px,transparent 4px);}
+.chipset-pins.top{top:-3px;bottom:auto;}
+.chipset-pins.left{left:-3px;right:auto;top:4px;bottom:4px;width:3px;height:auto;
+  background:repeating-linear-gradient(0deg,var(--trace-b) 0,var(--trace-b) 1px,transparent 1px,transparent 4px);}
+.chipset-pins.right{right:-3px;left:auto;top:4px;bottom:4px;width:3px;height:auto;
+  background:repeating-linear-gradient(0deg,var(--trace-b) 0,var(--trace-b) 1px,transparent 1px,transparent 4px);}
+
+/* CMOS Battery */
+.shape-cmos{
+  width:44px;height:44px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#666,#1a1a1a);
+  border:2px solid #555;
+  box-shadow:0 0 10px rgba(0,0,0,.5),inset 0 2px 4px rgba(255,255,255,.1);
+  display:flex;align-items:center;justify-content:center;
+  flex-direction:column;
+}
+.cmos-plus{font-size:10px;color:var(--trace-b);font-weight:bold;line-height:1;margin-top:2px;}
+.cmos-text{font-family:'Share Tech Mono',monospace;font-size:6px;color:#777;margin-top:1px;}
+
+/* M.2 Slot */
+.shape-m2{
+  height:18px;
+  background:linear-gradient(180deg,#080808 0%,#111 100%);
+  border:2px solid #333;border-radius:1px;position:relative;
+}
+.shape-m2::before{content:'';position:absolute;left:6px;top:50%;width:45px;height:3px;
+  background:var(--trace-b);transform:translateY(-50%);opacity:.7;}
+
+/* SATA port */
+.shape-sata{
+  width:16px;height:32px;
+  background:#0a0a0a;
+  border:2px solid #444;border-radius:2px;position:relative;
+}
+.shape-sata::before{content:'';position:absolute;inset:3px;
+  background:linear-gradient(180deg,var(--trace-b),#5a3a10);opacity:.5;border-radius:1px;}
+
+/* VRM Phase */
+.shape-vrm{
+  background:linear-gradient(135deg,#080808 0%,#111 50%,#080808 100%);
+  border:1px solid #2a2a2a;border-radius:1px;
+}
+.vrm-caps{display:flex;gap:3px;position:absolute;bottom:-8px;left:0;right:0;justify-content:center;}
+.cap-small{width:5px;height:5px;border-radius:50%;background:radial-gradient(#333,#111);border:1px solid #444;}
+
+/* Fan Header */
+.shape-fan{
+  width:20px;height:20px;
+  background:#080808;border:1px solid #444;
+  display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:2px;
+}
+.fan-pin{background:#111;border:1px solid #333;}
+
+/* I/O Panel */
+.shape-io{
+  width:58px;height:224px;
+  background:#0a0a0a;border-right:3px solid #2a2a2a;
+  display:flex;flex-direction:column;gap:4px;padding:6px 4px;
+}
+.io-port{border-radius:2px;border:1px solid #333;flex-shrink:0;}
+.io-port.usb-a{height:22px;background:#0a0a10;border-color:#1a1a5a;}
+.io-port.usb-c{height:14px;background:#0a0a10;border-color:#2a2aaa;}
+.io-port.lan{height:28px;background:#0a100a;border-color:#1a5a1a;}
+.io-port.audio{height:18px;background:#100a0a;border-color:#5a1a00;}
+.io-port.dp{height:20px;background:#0a0a0a;border-color:#3a3a3a;}
+.io-port.hdmi{height:16px;background:#0a0a0a;border-color:#444;}
+
+/* Front Panel */
+.shape-fp{
+  height:28px;
+  background:#080808;border:1px solid #333;border-radius:2px;
+  display:grid;gap:2px;padding:3px;
+}
+
+/* USB header */
+.shape-usb3{
+  width:54px;height:28px;
+  background:#050510;border:2px solid #1a1a6a;border-radius:2px;
+  display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding:3px;
+}
+.usb-pin{background:#090909;border:1px solid #2a2a4a;}
+
+/* Audio header */
+.shape-audio{
+  width:48px;height:26px;
+  background:#100505;border:2px solid #5a1a00;border-radius:2px;
+  display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding:3px;
+}
+.audio-pin{background:#090909;border:1px solid #3a0a00;}
+
+/* BIOS chip */
+.shape-bios{
+  width:42px;height:28px;
+  background:#050505;border:2px solid #333;position:relative;
+}
+.bios-pins-l{position:absolute;left:-4px;top:4px;bottom:4px;width:4px;
+  background:repeating-linear-gradient(0deg,var(--trace-b) 0,var(--trace-b) 2px,transparent 2px,transparent 5px);}
+.bios-pins-r{position:absolute;right:-4px;top:4px;bottom:4px;width:4px;
+  background:repeating-linear-gradient(0deg,var(--trace-b) 0,var(--trace-b) 2px,transparent 2px,transparent 5px);}
+.bios-dot{position:absolute;top:4px;left:4px;width:5px;height:5px;border-radius:50%;background:#333;}
+
+/* Silkscreen labels */
+.silk{position:absolute;z-index:8;pointer-events:none;
+  font-family:'Share Tech Mono',monospace;font-size:7px;color:rgba(200,220,200,.55);white-space:nowrap;}
+
+/* Capacitors */
+.cap-big{position:absolute;border-radius:50%;z-index:6;pointer-events:none;}
+.cap-arr{display:flex;gap:3px;position:absolute;z-index:6;pointer-events:none;}
+.cap-single{border-radius:50%;background:radial-gradient(circle at 35% 30%,#2a4a2a,#0d1a0d);border:1px solid #1a3a1a;}
+
+/* ── HOVER TOOLTIP ────────────────────────── */
+.tip{
+  position:absolute;background:rgba(6,14,9,.96);
+  border:1px solid var(--glow);border-radius:4px;
+  padding:7px 12px;font-family:'Rajdhani',sans-serif;font-size:13px;
+  color:var(--glow);white-space:nowrap;z-index:200;pointer-events:none;
+  opacity:0;transform:translateY(-4px);transition:all .2s;
+  box-shadow:0 0 20px rgba(0,255,136,.2);
+}
+.comp:hover .tip{opacity:1;transform:translateY(0);}
+
+/* ── COMP LABEL ON BOARD ─────────────────── */
+.board-label{
+  position:absolute;z-index:9;pointer-events:none;
+  font-family:'Share Tech Mono',monospace;font-size:8px;
+  color:rgba(212,175,55,.8);white-space:nowrap;
+}
+
+/* ── RIGHT PANEL ──────────────────────────── */
+.side-panel{
+  width:330px;flex-shrink:0;
+  background:var(--panel);border-left:1px solid var(--pborder);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+
+/* LEARN panel */
+#learnPanel{display:flex;flex-direction:column;height:100%;}
+.lp-head{padding:18px 20px 14px;border-bottom:1px solid var(--pborder);
+  background:linear-gradient(180deg,#0D2015,transparent);}
+.lp-title{font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:600;
+  color:var(--glow);letter-spacing:2px;margin-bottom:3px;}
+.lp-sub{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:var(--accent);opacity:.65;}
+.lp-body{flex:1;overflow-y:auto;padding:18px;scrollbar-width:thin;scrollbar-color:var(--pborder) transparent;}
+
+.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;text-align:center;gap:14px;opacity:.7;}
+.welcome-icon{font-size:44px;}
+.welcome-h{font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:600;color:var(--trace-b);}
+.welcome-p{font-size:.85rem;color:var(--txt2);line-height:1.6;}
+.comp-count{display:inline-block;padding:4px 12px;background:rgba(0,255,136,.08);
+  border:1px solid rgba(0,255,136,.2);border-radius:20px;font-family:'Share Tech Mono',monospace;
+  font-size:.65rem;color:var(--glow);}
+
+/* Component detail */
+#compDetail{display:none;}
+#compDetail.show{display:block;}
+.cd-name{font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:2px;}
+.cd-cat{font-family:'Share Tech Mono',monospace;font-size:.6rem;color:var(--accent);
+  letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;}
+.cd-desc{font-size:.88rem;color:var(--txt2);line-height:1.65;margin-bottom:16px;
+  padding-bottom:14px;border-bottom:1px solid var(--pborder);}
+.sec-title{font-family:'Orbitron',sans-serif;font-size:.6rem;font-weight:600;
+  color:var(--accent);letter-spacing:2px;margin-bottom:10px;}
+.fn-item{display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;}
+.fn-dot{width:6px;height:6px;border-radius:50%;background:var(--glow);
+  box-shadow:0 0 6px var(--glow);flex-shrink:0;margin-top:6px;}
+.fn-txt{font-size:.83rem;color:var(--txt);line-height:1.5;}
+.fact-box{margin-top:16px;padding:12px;
+  background:rgba(0,255,136,.04);border:1px solid rgba(0,255,136,.18);
+  border-left:3px solid var(--glow);border-radius:4px;}
+.fact-lbl{font-family:'Orbitron',sans-serif;font-size:.58rem;color:var(--glow);
+  letter-spacing:2px;margin-bottom:6px;}
+.fact-txt{font-size:.8rem;color:var(--txt2);line-height:1.5;}
+
+/* Component navigator */
+.comp-nav{margin-top:18px;padding-top:14px;border-top:1px solid var(--pborder);}
+.nav-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:3px;
+  cursor:pointer;transition:background .2s;font-size:.8rem;color:var(--txt2);}
+.nav-item:hover{background:rgba(0,255,136,.04);color:var(--txt);}
+.nav-item.active{background:rgba(0,255,136,.07);color:var(--glow);}
+.nav-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+/* QUIZ panel */
+#quizPanel{display:none;flex-direction:column;height:100%;}
+#quizPanel.show{display:flex;}
+.qp-head{padding:16px 20px;border-bottom:1px solid var(--pborder);
+  background:linear-gradient(180deg,#0D2015,transparent);}
+.qp-bar{height:4px;background:#1a3a25;border-radius:2px;margin-bottom:12px;overflow:hidden;}
+.qp-bar-fill{height:100%;background:linear-gradient(90deg,var(--glow),var(--bright));
+  border-radius:2px;transition:width .5s ease;}
+.qp-stats{display:flex;justify-content:space-around;}
+.qs-val{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;text-align:center;}
+.qs-val.g{color:var(--glow);}
+.qs-val.y{color:var(--gold);}
+.qs-val.o{color:var(--orange);}
+.qs-lbl{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--accent);opacity:.7;text-align:center;}
+
+.qp-body{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px;
+  scrollbar-width:thin;scrollbar-color:var(--pborder) transparent;}
+
+/* Quiz start screen */
+#quizStart{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;gap:18px;text-align:center;padding:10px;}
+.qs-icon{font-size:3rem;}
+.qs-title{font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:700;color:var(--gold);}
+.qs-desc{font-size:.85rem;color:var(--txt2);line-height:1.6;}
+.quiz-type-sel{width:100%;display:flex;flex-direction:column;gap:8px;text-align:left;}
+.qt-opt{padding:12px;border:1px solid var(--pborder);border-radius:4px;cursor:pointer;
+  transition:all .2s;background:rgba(255,255,255,.02);}
+.qt-opt:hover,.qt-opt.sel{border-color:var(--gold);background:rgba(255,215,0,.05);}
+.qt-opt-h{font-family:'Rajdhani',sans-serif;font-size:.9rem;font-weight:600;
+  color:var(--txt);margin-bottom:2px;}
+.qt-opt-d{font-size:.75rem;color:var(--txt2);}
+.start-btn{padding:12px 32px;background:var(--gold);color:#060E09;border:none;
+  border-radius:4px;font-family:'Orbitron',sans-serif;font-size:.7rem;font-weight:700;
+  letter-spacing:2px;cursor:pointer;transition:all .25s;}
+.start-btn:hover{background:#ffe44d;transform:translateY(-2px);box-shadow:0 6px 24px rgba(255,215,0,.3);}
+
+/* Active quiz */
+#quizActive{display:none;flex-direction:column;gap:14px;height:100%;}
+#quizActive.show{display:flex;}
+.q-badge{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:var(--accent);
+  letter-spacing:2px;background:rgba(0,255,136,.08);display:inline-block;
+  padding:3px 8px;border-radius:2px;}
+.q-text{font-family:'Rajdhani',sans-serif;font-size:1.02rem;font-weight:500;
+  color:var(--txt);line-height:1.5;}
+.q-opts{display:flex;flex-direction:column;gap:8px;}
+.q-opt{padding:11px 14px;background:rgba(255,255,255,.025);border:1px solid var(--pborder);
+  border-radius:4px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:.88rem;
+  color:var(--txt2);text-align:left;transition:all .2s;width:100%;}
+.q-opt:hover:not(:disabled){background:rgba(0,255,136,.05);border-color:var(--glow);color:var(--txt);}
+.q-opt.ok{background:rgba(0,255,136,.12);border-color:var(--glow);color:var(--glow);}
+.q-opt.bad{background:rgba(255,68,68,.12);border-color:#FF4444;color:#FF6666;}
+.q-opt:disabled{cursor:not-allowed;}
+
+.click-hint{padding:14px;background:rgba(255,215,0,.05);border:1px dashed rgba(255,215,0,.3);
+  border-radius:4px;font-size:.82rem;color:var(--gold);text-align:center;line-height:1.5;}
+
+.q-feedback{padding:12px 14px;border-radius:4px;font-size:.82rem;line-height:1.5;display:none;}
+.q-feedback.ok{display:block;background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.25);color:var(--glow);}
+.q-feedback.bad{display:block;background:rgba(255,68,68,.08);border:1px solid rgba(255,68,68,.25);color:#FF6666;}
+.next-btn{padding:11px;background:var(--glow);color:#060E09;border:none;border-radius:4px;
+  font-family:'Orbitron',sans-serif;font-size:.65rem;font-weight:700;letter-spacing:2px;
+  cursor:pointer;transition:all .2s;display:none;margin-top:auto;}
+.next-btn.show{display:block;}
+.next-btn:hover{background:var(--bright);transform:translateY(-1px);}
+
+/* Quiz complete */
+#quizDone{display:none;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;gap:14px;text-align:center;padding:20px;}
+#quizDone.show{display:flex;}
+.done-score{font-family:'Orbitron',sans-serif;font-size:3rem;font-weight:900;
+  color:var(--glow);text-shadow:0 0 30px rgba(0,255,136,.5);}
+.done-lbl{font-family:'Share Tech Mono',monospace;font-size:.75rem;color:var(--accent);}
+.done-msg{font-size:.9rem;color:var(--txt2);line-height:1.6;}
+.restart-btn{padding:11px 28px;background:transparent;border:1px solid var(--glow);
+  color:var(--glow);border-radius:4px;font-family:'Orbitron',sans-serif;font-size:.65rem;
+  font-weight:600;letter-spacing:2px;cursor:pointer;transition:all .3s;margin-top:8px;}
+.restart-btn:hover{background:rgba(0,255,136,.08);}
+
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-thumb{background:var(--pborder);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MOTHER<span>BOARD</span> EXPLORER</div>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="btnLearn" onclick="setMode('learn')">📖 LEARN</button>
+    <button class="mode-btn" id="btnQuiz" onclick="setMode('quiz')">🎯 QUIZ</button>
+  </div>
+  <div class="hdr-sub">ATX · Z790 · INTERACTIVE STUDY TOOL</div>
+</header>
+
+<div class="app-layout">
+
+  <!-- MOTHERBOARD -->
+  <div class="board-wrap">
+    <div class="motherboard" id="mb">
+
+      <!-- SVG Traces -->
+      <svg class="traces" viewBox="0 0 820 640" preserveAspectRatio="none">
+        <defs>
+          <style>.t{stroke:#8B6914;stroke-width:1.5;fill:none;opacity:.5}
+          .t2{stroke:#D4AF37;stroke-width:1;fill:none;opacity:.4}
+          .t3{stroke:#5a3a10;stroke-width:3;fill:none;opacity:.4}</style>
+        </defs>
+        <!-- Power traces -->
+        <path class="t3" d="M358 280 H 460 V 200"/>
+        <path class="t3" d="M804 180 H 760 V 380 H 580 V 470"/>
+        <!-- CPU to RAM -->
+        <path class="t2" d="M280 200 H 315"/>
+        <path class="t2" d="M280 220 H 315"/>
+        <path class="t2" d="M280 240 H 315"/>
+        <!-- CPU to Chipset -->
+        <path class="t" d="M205 270 V 390"/>
+        <path class="t" d="M220 270 V 390"/>
+        <path class="t" d="M235 270 V 390"/>
+        <!-- Chipset to PCIe -->
+        <path class="t" d="M240 470 V 380 H 120 V 370"/>
+        <path class="t" d="M260 470 V 385 H 130 V 395"/>
+        <!-- SATA traces -->
+        <path class="t2" d="M645 310 H 600 V 470"/>
+        <path class="t2" d="M645 320 H 595 V 470"/>
+        <!-- Chipset to M2 -->
+        <path class="t" d="M315 430 H 430"/>
+        <path class="t" d="M315 440 H 430"/>
+        <!-- ATX to CPU power -->
+        <path class="t3" d="M355 10 H 160 V 80"/>
+        <!-- IO traces -->
+        <path class="t2" d="M58 80 H 130 V 195"/>
+        <path class="t2" d="M58 100 H 125 V 195"/>
+        <!-- Ground plane hint -->
+        <rect x="60" y="490" width="720" height="1" class="t" opacity=".3"/>
+        <rect x="60" y="50" width="1" height="420" class="t" opacity=".3"/>
+        <!-- Via dots -->
+        <circle cx="200" cy="350" r="2" fill="#8B6914" opacity=".6"/>
+        <circle cx="350" cy="460" r="2" fill="#8B6914" opacity=".6"/>
+        <circle cx="500" cy="300" r="2" fill="#8B6914" opacity=".6"/>
+        <circle cx="620" cy="200" r="2" fill="#8B6914" opacity=".6"/>
+        <circle cx="160" cy="420" r="2" fill="#8B6914" opacity=".6"/>
+        <circle cx="400" cy="120" r="2" fill="#8B6914" opacity=".6"/>
+        <circle cx="700" cy="350" r="2" fill="#8B6914" opacity=".6"/>
+        <circle cx="550" cy="500" r="2" fill="#8B6914" opacity=".6"/>
+        <circle cx="300" cy="520" r="2" fill="#D4AF37" opacity=".5"/>
+      </svg>
+
+      <!-- Mounting holes -->
+      <div class="mount-hole" style="left:20px;top:20px;"></div>
+      <div class="mount-hole" style="right:20px;top:20px;"></div>
+      <div class="mount-hole" style="left:20px;bottom:20px;"></div>
+      <div class="mount-hole" style="right:20px;bottom:20px;"></div>
+      <div class="mount-hole" style="left:20px;top:50%;transform:translateY(-50%);"></div>
+      <div class="mount-hole" style="right:20px;top:50%;transform:translateY(-50%);"></div>
+
+      <!-- Decorative caps -->
+      <div class="cap-arr" style="left:105px;top:45px;">
+        <div class="cap-single" style="width:9px;height:9px;"></div>
+        <div class="cap-single" style="width:9px;height:9px;"></div>
+        <div class="cap-single" style="width:9px;height:9px;"></div>
+      </div>
+      <div class="cap-arr" style="left:300px;top:295px;">
+        <div class="cap-single" style="width:7px;height:7px;"></div>
+        <div class="cap-single" style="width:7px;height:7px;"></div>
+      </div>
+      <div class="cap-arr" style="left:470px;top:180px;">
+        <div class="cap-single" style="width:8px;height:8px;"></div>
+        <div class="cap-single" style="width:8px;height:8px;"></div>
+        <div class="cap-single" style="width:8px;height:8px;"></div>
+      </div>
+      <div class="cap-arr" style="left:600px;top:260px;">
+        <div class="cap-single" style="width:7px;height:7px;"></div>
+        <div class="cap-single" style="width:7px;height:7px;"></div>
+      </div>
+
+      <!-- Silkscreen text -->
+      <div class="silk" style="left:138px;top:108px;">CPU1</div>
+      <div class="silk" style="left:322px;top:58px;">DIMM_A1</div>
+      <div class="silk" style="left:358px;top:58px;">DIMM_A2</div>
+      <div class="silk" style="left:394px;top:58px;">DIMM_B1</div>
+      <div class="silk" style="left:430px;top:58px;">DIMM_B2</div>
+      <div class="silk" style="left:63px;top:368px;">PCIEX16_1</div>
+      <div class="silk" style="left:63px;top:413px;">PCIEX1</div>
+      <div class="silk" style="left:63px;top:448px;">PCIEX16_2</div>
+      <div class="silk" style="left:436px;top:293px;">M2_1</div>
+      <div class="silk" style="left:436px;top:463px;">M2_2</div>
+      <div class="silk" style="left:648px;top:270px;">SATA3</div>
+      <div class="silk" style="left:763px;top:78px;">ATX1</div>
+      <div class="silk" style="left:291px;top:4px;">CPU_PWR1</div>
+      <div class="silk" style="left:234px;top:475px;">PCH</div>
+      <div class="silk" style="left:505px;top:205px;">CR2032</div>
+      <div class="silk" style="left:590px;top:176px;">BIOS</div>
+      <div class="silk" style="left:115px;top:555px;">F_PANEL</div>
+      <div class="silk" style="left:244px;top:555px;">F_USB30</div>
+      <div class="silk" style="left:47px;top:552px;">F_AUDIO</div>
+      <div class="silk" style="left:256px;top:38px;">CPU_FAN1</div>
+      <div class="silk" style="left:693px;top:26px;">C1-C6</div>
+      <div class="silk" style="left:693px;top:80px;">L1-L4</div>
+      <div class="silk" style="left:693px;top:134px;">VRM_HS</div>
+      <div class="silk" style="left:493px;top:76px;">NB</div>
+      <div class="silk" style="left:563px;top:224px;">SB/PCH2</div>
+      <div class="silk" style="left:303px;top:548px;">RGB1</div>
+      <div class="silk" style="left:361px;top:548px;">Q-CODE</div>
+
+      <!-- Components injected by JS here -->
+      <div id="compLayer"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="side-panel">
+
+    <!-- LEARN PANEL -->
+    <div id="learnPanel">
+      <div class="lp-head">
+        <div class="lp-title">COMPONENT EXPLORER</div>
+        <div class="lp-sub">Click any component on the board to learn about it</div>
+      </div>
+      <div class="lp-body">
+        <div class="welcome" id="welcomeState">
+          <div class="welcome-icon">🖥️</div>
+          <div class="welcome-h">START EXPLORING</div>
+          <div class="welcome-p">Click on any highlighted component on the motherboard to learn its name, purpose, and key functions.</div>
+          <div class="comp-count" id="compCountBadge">25 Components to Explore</div>
+        </div>
+        <div id="compDetail">
+          <div class="cd-name" id="cdName">—</div>
+          <div class="cd-cat" id="cdCat">—</div>
+          <div class="cd-desc" id="cdDesc">—</div>
+          <div class="sec-title">KEY FUNCTIONS</div>
+          <div id="cdFunctions"></div>
+          <div class="fact-box">
+            <div class="fact-lbl">⚡ DID YOU KNOW</div>
+            <div class="fact-txt" id="cdFact">—</div>
+          </div>
+          <div class="comp-nav">
+            <div class="sec-title">ALL COMPONENTS</div>
+            <div id="navList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUIZ PANEL -->
+    <div id="quizPanel">
+      <div class="qp-head">
+        <div class="qp-bar"><div class="qp-bar-fill" id="qpBarFill" style="width:0%"></div></div>
+        <div class="qp-stats">
+          <div><div class="qs-val g" id="qScore">0</div><div class="qs-lbl">SCORE</div></div>
+          <div><div class="qs-val y" id="qNum">0/0</div><div class="qs-lbl">QUESTION</div></div>
+          <div><div class="qs-val o" id="qStreak">🔥 0</div><div class="qs-lbl">STREAK</div></div>
+        </div>
+      </div>
+      <div class="qp-body">
+        <!-- Start Screen -->
+        <div id="quizStart">
+          <div class="qs-icon">🎯</div>
+          <div class="qs-title">READY TO TEST YOURSELF?</div>
+          <div class="qs-desc">Choose a quiz type and challenge your motherboard knowledge. 15 questions, 3 types of challenges!</div>
+          <div class="quiz-type-sel">
+            <div class="qt-opt sel" data-type="mixed" onclick="selectQuizType(this,'mixed')">
+              <div class="qt-opt-h">🎲 Mixed Quiz (Recommended)</div>
+              <div class="qt-opt-d">All 3 question types — identify, locate, and explain</div>
+            </div>
+            <div class="qt-opt" data-type="identify" onclick="selectQuizType(this,'identify')">
+              <div class="qt-opt-h">👁️ Name That Component</div>
+              <div class="qt-opt-d">See a highlighted component — pick the correct name</div>
+            </div>
+            <div class="qt-opt" data-type="locate" onclick="selectQuizType(this,'locate')">
+              <div class="qt-opt-h">📍 Find the Component</div>
+              <div class="qt-opt-d">Given a name — click the correct component on the board</div>
+            </div>
+            <div class="qt-opt" data-type="function" onclick="selectQuizType(this,'function')">
+              <div class="qt-opt-h">⚙️ What Does It Do?</div>
+              <div class="qt-opt-d">Given a component name — pick its primary function</div>
+            </div>
+          </div>
+          <button class="start-btn" onclick="startQuiz()">BEGIN QUIZ →</button>
+        </div>
+
+        <!-- Active Quiz -->
+        <div id="quizActive">
+          <div class="q-badge" id="qBadge">IDENTIFY</div>
+          <div class="q-text" id="qText">Loading...</div>
+          <div class="q-opts" id="qOpts"></div>
+          <div class="click-hint" id="qClickHint" style="display:none">
+            👆 Click the correct component on the motherboard above
+          </div>
+          <div class="q-feedback" id="qFeedback"></div>
+          <button class="next-btn" id="qNextBtn" onclick="nextQuestion()">NEXT QUESTION →</button>
+        </div>
+
+        <!-- Done Screen -->
+        <div id="quizDone">
+          <div class="done-score" id="doneScore">0/15</div>
+          <div class="done-lbl">QUIZ COMPLETE</div>
+          <div class="done-msg" id="doneMsg">—</div>
+          <button class="restart-btn" onclick="resetQuiz()">↩ TRY AGAIN</button>
+          <button class="restart-btn" style="border-color:var(--trace-b);color:var(--trace-b)" onclick="setMode('learn')">📖 BACK TO LEARNING</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  COMPONENT DATA
+// ═══════════════════════════════════════════════════════
+const COMPS = [
+  {
+    id:'cpu_socket', name:'CPU Socket', fullName:'CPU Socket (LGA1700)',
+    cat:'Processing Unit',
+    x:130, y:118, w:150, h:150, shape:'cpu',
+    desc:'The CPU socket is where the processor — the brain of your computer — plugs into the motherboard. This LGA1700 socket has 1700 tiny contact pads and is designed for Intel\'s 12th and 13th generation Core processors (like Intel Core i9-13900K).',
+    fns:[
+      'Physically secures and connects the CPU to the motherboard',
+      'Provides 1700 electrical contact points for data, power, and signals',
+      'Uses a ZIF (Zero Insertion Force) lever to install CPU without damaging pins',
+      'Determines which CPUs are compatible — different sockets = different CPUs'
+    ],
+    fact:'In LGA sockets, the pins are on the motherboard (not the CPU). AMD uses PGA sockets where pins are on the CPU instead!',
+    navColor:'#D4AF37'
+  },
+  {
+    id:'vrm', name:'VRM (Voltage Regulator)', fullName:'Voltage Regulator Module (VRM)',
+    cat:'Power Delivery',
+    x:50, y:108, w:68, h:160, shape:'vrm',
+    desc:'The VRM (Voltage Regulator Module) converts the 12V from the power supply into the precise, lower voltage the CPU needs (typically 0.8–1.5V). High-end motherboards have more VRM phases for better power delivery.',
+    fns:[
+      'Converts 12V input from the PSU to a stable, precise voltage for the CPU',
+      'More VRM phases = more stable power delivery = better overclocking potential',
+      'Protects the CPU from voltage spikes and fluctuations',
+      'The MOSFETs (transistors) in the VRM generate heat, which is why they often have heatsinks'
+    ],
+    fact:'When you see a motherboard advertised as "16+0 phase" or "20+1 phase", they\'re talking about VRM phases. More phases = smoother power!',
+    navColor:'#52B788'
+  },
+  {
+    id:'cpu_power', name:'8-Pin CPU Power', fullName:'8-Pin CPU Power Connector',
+    cat:'Power Delivery',
+    x:291, y:6, w:68, h:42, shape:'cpu8pin',
+    desc:'This 8-pin (EPS12V) connector delivers dedicated power specifically to the CPU and VRM. It comes from the power supply unit and must be connected for the system to boot.',
+    fns:[
+      'Supplies 12V power directly to the CPU via the VRM',
+      'The 8-pin connector can deliver up to 288W of power',
+      'Must be connected separately from the main 24-pin ATX — both are required',
+      'Some high-end boards have two 8-pin connectors for extreme overclocking'
+    ],
+    fact:'This connector was originally called "ATX12V" or "P4 connector" (4-pin) when it was introduced for the Pentium 4. Modern CPUs need the full 8-pin version!',
+    navColor:'#4EA8DE'
+  },
+  {
+    id:'ram_slots', name:'RAM Slots (DIMM)', fullName:'DDR5 DIMM Memory Slots',
+    cat:'Memory',
+    x:315, y:63, w:148, h:192, shape:'ramgroup',
+    desc:'These 4 slots hold your RAM (Random Access Memory) sticks. RAM is your computer\'s short-term memory — it stores data that the CPU is currently using. More RAM means more programs can run simultaneously without slowing down.',
+    fns:[
+      'Hold RAM modules that store actively running programs and temporary data',
+      'Support dual-channel mode when RAM is installed in matching colored slot pairs',
+      'DDR5 slots can transfer data at speeds of up to 6400+ MT/s (mega-transfers per second)',
+      'Orange slots (A1/A2) and blue slots (B1/B2) indicate different memory channels'
+    ],
+    fact:'RAM is "volatile" memory — when you power off your PC, everything in RAM is erased! That\'s why you save files to your SSD/HDD instead.',
+    navColor:'#FF6B35'
+  },
+  {
+    id:'atx_power', name:'24-Pin ATX Power', fullName:'24-Pin ATX Power Connector',
+    cat:'Power Delivery',
+    x:758, y:78, w:46, h:202, shape:'atx24',
+    desc:'The 24-pin ATX connector is the main power connector of the motherboard. It delivers multiple voltages (+3.3V, +5V, +12V) to all the different parts of the motherboard. This is always the largest connector from your power supply.',
+    fns:[
+      'Main power input for the entire motherboard — delivers 3.3V, 5V, and 12V rails',
+      'Powers PCI slots, USB ports, SATA controllers, and the chipset',
+      'The latch on the connector locks it securely to prevent accidental disconnection',
+      'Without this, the motherboard will not power on at all'
+    ],
+    fact:'The 24-pin ATX standard was introduced in 2004. Before that, motherboards used a 20-pin connector. The extra 4 pins added more power capacity.',
+    navColor:'#4EA8DE'
+  },
+  {
+    id:'pcie_x16', name:'PCIe x16 Slot (Primary)', fullName:'PCIe 5.0 x16 Slot — Primary GPU Slot',
+    cat:'Expansion Slots',
+    x:60, y:360, w:503, h:24, shape:'pciex16',
+    desc:'This is the primary PCIe (Peripheral Component Interconnect Express) x16 slot. It\'s the most important expansion slot on the motherboard — this is where you install your Graphics Card (GPU). The "x16" means it has 16 data lanes, giving it maximum bandwidth.',
+    fns:[
+      'Primary slot for your Graphics Processing Unit (GPU/graphics card)',
+      '16 data lanes provide the maximum bandwidth needed for modern GPUs',
+      'PCIe 5.0 offers up to 128 GB/s of bandwidth (double PCIe 4.0)',
+      'The metal reinforcement (steel slot) protects against GPU sag and EMI interference'
+    ],
+    fact:'Even though the slot is physically x16, some CPUs only connect 8 lanes to the second x16 slot. Always check your manual for actual lane counts!',
+    navColor:'#D4AF37'
+  },
+  {
+    id:'pcie_x1', name:'PCIe x1 Slot', fullName:'PCIe x1 Expansion Slot',
+    cat:'Expansion Slots',
+    x:60, y:404, w:180, h:20, shape:'pciex1',
+    desc:'The PCIe x1 slot is a smaller expansion slot used for cards that don\'t need a lot of bandwidth. You can add sound cards, Wi-Fi cards, capture cards, USB expansion cards, and more using these slots.',
+    fns:[
+      'Add sound cards for higher quality audio output',
+      'Install Wi-Fi / Bluetooth cards for wireless connectivity',
+      'Connect capture cards for recording or streaming gameplay',
+      'Add extra USB ports or other I/O via expansion cards'
+    ],
+    fact:'A PCIe x1 card will physically fit in a larger slot (like x4 or x16). This is called "backward compatibility" and it always works!',
+    navColor:'#888'
+  },
+  {
+    id:'pcie_x16_2', name:'PCIe x16 Slot (Secondary)', fullName:'PCIe 4.0 x4 Slot (x16 Physical)',
+    cat:'Expansion Slots',
+    x:60, y:444, w:423, h:24, shape:'pciex16s',
+    desc:'This second x16-sized slot physically looks like the primary GPU slot but typically only has 4 actual PCIe lanes connected (from the chipset). It\'s used for a second GPU, high-speed storage cards, or NVMe RAID cards.',
+    fns:[
+      'Install a second GPU for multi-GPU configurations',
+      'Add PCIe NVMe RAID cards for ultra-fast storage arrays',
+      'Connect specialized accelerator cards (AI, video processing)',
+      'The x16 size accommodates large cards even though lanes may be limited'
+    ],
+    fact:'Running two GPUs (SLI or CrossFire) was once very popular for gaming, but modern games and drivers have moved away from multi-GPU support.',
+    navColor:'#888'
+  },
+  {
+    id:'m2_slot1', name:'M.2 NVMe Slot (Top)', fullName:'M.2 Slot — PCIe 4.0 x4 NVMe',
+    cat:'Storage',
+    x:430, y:286, w:110, h:18, shape:'m2',
+    desc:'The M.2 slot holds M.2 NVMe SSDs — incredibly fast solid-state drives that plug directly into the motherboard. They\'re much faster than regular SATA SSDs and eliminate the need for cables. An M.2 NVMe drive can transfer data 5-7x faster than a SATA SSD!',
+    fns:[
+      'Holds M.2 form factor SSDs (2230, 2242, 2260, 2280, 22110 sizes)',
+      'PCIe 4.0 x4 M.2 drives can reach 7000 MB/s read speeds',
+      'Eliminates cables entirely — the drive plugs directly into the slot',
+      'Usually thermally shielded by a metal heatsink cover on the motherboard'
+    ],
+    fact:'The name "M.2" refers to the physical form factor standard. NVMe (Non-Volatile Memory Express) is the protocol. Not all M.2 slots are NVMe — some are SATA M.2!',
+    navColor:'#95D5B2'
+  },
+  {
+    id:'m2_slot2', name:'M.2 NVMe Slot (Bottom)', fullName:'M.2 Slot — PCIe 4.0 x4 NVMe',
+    cat:'Storage',
+    x:430, y:456, w:110, h:18, shape:'m2b',
+    desc:'A second M.2 slot gives you room for an additional ultra-fast NVMe SSD. Many builders use one M.2 for the OS (Windows/Linux) and another for games or applications, getting maximum speed for both.',
+    fns:[
+      'Second high-speed storage slot for an additional NVMe SSD',
+      'Shares PCIe lanes with the chipset — may use PCIe 4.0 or 3.0 lanes',
+      'Perfect for storing large games, video projects, or virtual machines',
+      'Hot-plug not supported — install/remove only when PC is powered off'
+    ],
+    fact:'A single PCIe 4.0 NVMe SSD can load a game that takes 45 seconds on HDD in under 5 seconds. That\'s how big the speed difference is!',
+    navColor:'#95D5B2'
+  },
+  {
+    id:'sata', name:'SATA Ports', fullName:'SATA III Ports (6 Gbps)',
+    cat:'Storage',
+    x:648, y:272, w:20, h:215, shape:'satagroup',
+    desc:'SATA (Serial ATA) ports connect traditional 2.5" SSDs and 3.5" hard drives to the motherboard using thin data cables. While slower than M.2 NVMe, SATA drives are cheaper and perfectly fine for mass storage.',
+    fns:[
+      'Connect 2.5" SATA SSDs, 3.5" HDDs, and optical drives via cables',
+      'SATA III supports up to 6 Gbps (~550 MB/s real-world speed)',
+      'Each port connects one drive — 6 ports means up to 6 SATA devices',
+      'SATA power comes from the PSU separately (different cable from data cable)'
+    ],
+    fact:'SATA was introduced in 2003 to replace the wide, clunky PATA (IDE) cables. SATA cables are much thinner and improve airflow inside your case!',
+    navColor:'#888'
+  },
+  {
+    id:'chipset', name:'Chipset (PCH)', fullName:'Intel Z790 Platform Controller Hub',
+    cat:'Chipset',
+    x:232, y:386, w:82, h:82, shape:'chipset',
+    desc:'The chipset (Platform Controller Hub or PCH) is the traffic controller of the motherboard. It manages communication between the CPU and all the other components — USB ports, SATA drives, PCIe slots, and more. Think of it as the motherboard\'s own "sub-processor".',
+    fns:[
+      'Manages I/O operations for USB ports, SATA controllers, and PCIe lanes',
+      'Handles communication between slower peripherals and the fast CPU',
+      'Enables features like overclocking (on Z-series Intel chipsets)',
+      'Connected to the CPU via a high-speed DMI (Direct Media Interface) link'
+    ],
+    fact:'The Z in "Z790" means it supports overclocking. Intel\'s B-series (B760) chipsets are mid-range, and H-series (H770) are entry-level — they restrict some features.',
+    navColor:'#52B788'
+  },
+  {
+    id:'cmos', name:'CMOS Battery', fullName:'CR2032 CMOS Battery',
+    cat:'Power & BIOS',
+    x:499, y:198, w:44, h:44, shape:'cmos',
+    desc:'This small coin-cell battery (CR2032) keeps the CMOS memory powered even when your PC is turned off. CMOS memory stores your BIOS/UEFI settings, system time/date, and hardware configuration so you don\'t have to reconfigure everything each time you boot.',
+    fns:[
+      'Powers CMOS memory to retain BIOS settings when PC is powered off',
+      'Keeps the real-time clock (RTC) running — maintaining system date and time',
+      'Lasts 5-10 years in normal use before needing replacement',
+      'Removing it temporarily resets BIOS settings to factory defaults (CMOS Clear)'
+    ],
+    fact:'If your PC ever loses the date/time after every shutdown, or if BIOS settings keep resetting, it\'s almost always a dead CMOS battery! They cost less than $1 to replace.',
+    navColor:'#888'
+  },
+  {
+    id:'bios', name:'BIOS/UEFI Chip', fullName:'BIOS/UEFI Firmware ROM Chip',
+    cat:'Power & BIOS',
+    x:588, y:172, w:44, h:28, shape:'bios',
+    desc:'The BIOS (Basic Input/Output System) chip stores the firmware that runs the moment you press the power button — before Windows or Linux even loads. Modern systems use UEFI (Unified Extensible Firmware Interface), an improved version with a graphical interface.',
+    fns:[
+      'Contains firmware that initializes all hardware during boot (POST process)',
+      'Provides the BIOS/UEFI setup interface for configuring hardware settings',
+      'Stores overclock profiles, fan curves, boot order, and security settings',
+      'Can be updated (flashed) to add CPU support, fix bugs, or add features'
+    ],
+    fact:'BIOS stands for Basic Input/Output System and dates back to 1975! Modern UEFI replaced it around 2010, but we still casually call it "BIOS".',
+    navColor:'#888'
+  },
+  {
+    id:'cpu_fan', name:'CPU Fan Header', fullName:'4-Pin PWM CPU Fan Header',
+    cat:'Cooling',
+    x:255, y:36, w:22, h:22, shape:'fanheader',
+    desc:'This 4-pin header connects your CPU cooler\'s fan to the motherboard. The motherboard controls the fan speed automatically using PWM (Pulse Width Modulation) — speeding up when the CPU is hot and slowing down when it\'s cool.',
+    fns:[
+      'Powers and controls the CPU cooler fan speed via PWM signal',
+      '4 pins: 12V power, ground, RPM signal (tachometer), and PWM control signal',
+      'The motherboard adjusts fan speed based on CPU temperature sensors',
+      'Fan speed curves can be customized in BIOS to balance noise vs cooling'
+    ],
+    fact:'A 3-pin fan runs at constant voltage (noisy!). A 4-pin PWM fan varies its duty cycle — so it can run whisper-quiet at idle and ramp up only when needed!',
+    navColor:'#52B788'
+  },
+  {
+    id:'front_panel', name:'Front Panel Headers', fullName:'Front Panel I/O Header Block',
+    cat:'I/O Connectors',
+    x:115, y:554, w:92, h:28, shape:'fpanel',
+    desc:'These tiny pin headers connect the buttons and LEDs on your PC case front panel to the motherboard. They carry signals for the power button, reset button, power LED, and hard drive activity LED.',
+    fns:[
+      'Power SW: Connects the case power button to turn PC on/off',
+      'Reset SW: Connects the reset button to restart the system',
+      'Power LED: Makes the front panel power indicator light glow when on',
+      'HDD LED: Blinks the activity light when storage drives are being accessed'
+    ],
+    fact:'These are the most confusing cables to connect when building a PC! The pins are tiny and unlabeled on the case wires. Always keep your motherboard manual open!',
+    navColor:'#FF6B35'
+  },
+  {
+    id:'usb_header', name:'USB 3.0 Header', fullName:'USB 3.2 Gen 1 Front Panel Header',
+    cat:'I/O Connectors',
+    x:240, y:552, w:56, h:30, shape:'usb3header',
+    desc:'This large 20-pin header connects to the USB 3.0 ports on the front of your PC case. It\'s much larger than USB 2.0 headers and only fits one way, making it easier to connect correctly.',
+    fns:[
+      'Provides USB 3.2 Gen 1 (5 Gbps) connectivity to front panel USB-A ports',
+      'Supports two USB 3.0 ports simultaneously from one header',
+      'The keyed connector prevents incorrect insertion',
+      'Higher bandwidth than USB 2.0 headers — suitable for external SSDs and fast drives'
+    ],
+    fact:'USB 3.0 has been renamed multiple times: USB 3.1 Gen 1, USB 3.2 Gen 1, SuperSpeed USB. All mean the same 5 Gbps speed. USB naming is confusing by design!',
+    navColor:'#4EA8DE'
+  },
+  {
+    id:'audio_header', name:'Audio Header', fullName:'HD Audio Front Panel Header',
+    cat:'I/O Connectors',
+    x:44, y:550, w:50, h:28, shape:'audioheader',
+    desc:'This header connects the headphone jack and microphone port on your PC case front panel. It uses the HD Audio (High Definition Audio) standard for good quality sound from your front panel jacks.',
+    fns:[
+      'Connects front panel 3.5mm headphone and microphone jacks to the motherboard',
+      'Uses Intel HD Audio standard for better sound quality than older AC\'97',
+      'The motherboard\'s audio codec chip processes all audio through this header',
+      'Supports auto-detection of plugged-in headphones and microphones'
+    ],
+    fact:'If you forget to connect this header, your front panel audio jacks won\'t work — but rear panel audio still will! It\'s a common beginner mistake when building PCs.',
+    navColor:'#FF8C42'
+  },
+  {
+    id:'capacitors', name:'Capacitors', fullName:'Electrolytic/Polymer Capacitors',
+    cat:'Passive Components',
+    x:690, y:30, w:60, h:44, shape:'capacitors',
+    desc:'Capacitors are small cylindrical components scattered across the motherboard. They store and release electrical energy very quickly, smoothing out voltage fluctuations and filtering electrical noise. Without them, sensitive chips would receive unstable power and malfunction.',
+    fns:[
+      'Store electrical energy and release it instantly when needed',
+      'Smooth out voltage spikes and dips to protect chips from unstable power',
+      'Filter high-frequency electrical noise from power lines',
+      'Help the VRM deliver clean, stable power to the CPU and other components'
+    ],
+    fact:'Older motherboards used electrolytic capacitors which could "bulge" or explode if they failed — a condition called "capacitor plague" affected millions of boards in the early 2000s. Modern boards use solid polymer capacitors that last much longer!',
+    navColor:'#F4D03F'
+  },
+  {
+    id:'inductors', name:'Inductors (Coils)', fullName:'Power Inductors / Choke Coils',
+    cat:'Passive Components',
+    x:690, y:84, w:60, h:44, shape:'inductors',
+    desc:'Inductors, also called choke coils, are small square or cylindrical components with a coil of wire wound around a ferrite (iron) core. They work with capacitors in the VRM to regulate and smooth the power delivered to the CPU. They oppose sudden changes in electrical current.',
+    fns:[
+      'Store magnetic energy and release it to maintain steady current flow',
+      'Work with capacitors to form LC filters that clean up power delivery',
+      'Resist sudden current changes, protecting the CPU from power surges',
+      'Essential part of the Voltage Regulator Module (VRM) circuit'
+    ],
+    fact:'The "L" in LC filter stands for inductance (inductor). Together with capacitors (C), they form a low-pass filter that removes high-frequency switching noise from the VRM, giving the CPU clean, stable power!',
+    navColor:'#A569BD'
+  },
+  {
+    id:'heatsink_vrm', name:'VRM Heat Sink', fullName:'VRM / Chipset Heat Sink',
+    cat:'Cooling System',
+    x:690, y:138, w:68, h:56, shape:'vrm_heatsink',
+    desc:'Heat sinks are metal (usually aluminium) blocks with fins that sit on top of hot components like the VRM modules and chipset. They absorb heat generated by these components and dissipate it into the surrounding air. The CPU has its own separate large cooler, but VRMs and chipsets use these smaller passive heat sinks.',
+    fns:[
+      'Absorb heat from VRM MOSFETs and chipset through direct contact',
+      'Dissipate heat into the air via large surface-area fins',
+      'Prevent VRM and chipset from overheating during heavy workloads',
+      'High-end boards may have heat pipes connecting VRM and chipset heat sinks'
+    ],
+    fact:'The CPU cooler\'s heat sink can weigh over 1 kg! Motherboards have reinforcement brackets on the back to prevent the socket area from bending under this weight. Always check the "cooler mount weight" spec!',
+    navColor:'#85C1E9'
+  },
+  {
+    id:'rgb_header', name:'RGB / ARGB Header', fullName:'RGB & Addressable RGB Headers',
+    cat:'I/O Connectors',
+    x:300, y:552, w:50, h:28, shape:'rgb_header',
+    desc:'RGB headers are small pin connectors on the motherboard that control LED lighting strips and components inside your PC case. Standard RGB (4-pin) controls all LEDs as one color. Addressable RGB / ARGB (3-pin) can control each LED individually for animated effects.',
+    fns:[
+      '4-pin RGB header: controls case LED strips with a single color at a time',
+      '3-pin ARGB header: controls individual LEDs for rainbow and animation effects',
+      'Synchronises lighting with CPU coolers, RAM, GPU and case fans',
+      'Managed by motherboard software (e.g. ASUS Aura Sync, MSI Mystic Light)'
+    ],
+    fact:'ARGB headers use only 3 pins but can control hundreds of individual LEDs! The data pin sends a serial signal telling each LED exactly what color to display — like a tiny data bus just for lights.',
+    navColor:'#FF69B4'
+  },
+  {
+    id:'debug_led', name:'Debug LED / Q-Code', fullName:'POST Debug LED Display',
+    cat:'Diagnostics',
+    x:358, y:552, w:50, h:28, shape:'debug_led',
+    desc:'A debug LED display (also called Q-Code or POST code display) is a small 2-digit hexadecimal display or a set of 4 indicator LEDs (CPU, DRAM, VGA, BOOT) on high-end motherboards. During startup (POST — Power-On Self-Test), it shows numeric codes or lights up to indicate exactly which component is being tested or has failed.',
+    fns:[
+      'Shows POST codes during boot to indicate which hardware stage is being initialised',
+      'Helps diagnose failures — e.g., a stuck "C0" code means GPU issue, "55" means RAM issue',
+      '4-LED version lights up CPU/DRAM/VGA/BOOT to pinpoint the failing component',
+      'Invaluable for troubleshooting a PC that won\'t boot (no display, no beeps)'
+    ],
+    fact:'Without a debug LED, diagnosing a no-POST situation is like debugging blindly. The 2-digit hex code "00" or "FF" usually means the board passed all POST checks successfully and handed off to the OS bootloader!',
+    navColor:'#E74C3C'
+  },
+  {
+    id:'northbridge', name:'Northbridge (Legacy)', fullName:'Northbridge Chip (Historical)',
+    cat:'Chipset',
+    x:490, y:80, w:64, h:64, shape:'northbridge',
+    desc:'In older motherboards (pre-2012), the Northbridge was a separate chip that handled high-speed communication between the CPU, RAM, and graphics card (AGP/PCIe). It was called "Northbridge" because it appeared at the top (north) of motherboard diagrams. In modern CPUs, all Northbridge functions have been integrated directly into the CPU die itself.',
+    fns:[
+      'Managed the Front Side Bus (FSB) connecting CPU to main memory',
+      'Controlled the AGP/PCIe bus for the graphics card',
+      'Handled communication between CPU, RAM, and the Southbridge',
+      'In modern systems, these functions are built into the CPU itself (Memory Controller Hub)'
+    ],
+    fact:'Moving the Northbridge into the CPU was a game-changer! It eliminated the bottleneck of data traveling via external bus, dramatically reducing memory latency and increasing bandwidth. Intel did this with Nehalem (2008) and AMD with Phenom II.',
+    navColor:'#E67E22'
+  },
+  {
+    id:'southbridge', name:'Southbridge (Legacy)', fullName:'Southbridge / PCH Chip (Historical)',
+    cat:'Chipset',
+    x:560, y:228, w:64, h:64, shape:'southbridge',
+    desc:'The Southbridge was a chip that handled slower I/O operations — USB ports, SATA storage, PCI slots, audio, and the BIOS chip. It communicated with the Northbridge chip via an internal bus. In modern motherboards, it has been replaced by the PCH (Platform Controller Hub), which connects directly to the CPU.',
+    fns:[
+      'Controlled USB, SATA, PCI, and audio interfaces',
+      'Managed communication with the BIOS/UEFI firmware chip',
+      'Handled PCI bus and legacy I/O ports (serial, parallel, PS/2)',
+      'Modern equivalent is the PCH (Platform Controller Hub) chip you see on the board'
+    ],
+    fact:'The terms "Northbridge" and "Southbridge" came from their physical position on motherboard diagrams — north (top) for fast components, south (bottom) for slower I/O. Today\'s PCH is essentially a consolidated Southbridge that talks directly to the CPU!',
+    navColor:'#27AE60'
+  }
+];
+
+// ═══════════════════════════════════════════════════════
+//  BUILD BOARD
+// ═══════════════════════════════════════════════════════
+function buildBoard() {
+  const layer = document.getElementById('compLayer');
+  layer.innerHTML = '';
+  COMPS.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'comp hov-glow';
+    div.id = 'comp_'+c.id;
+    div.style.cssText = `left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px;`;
+    div.innerHTML = buildShape(c);
+    div.addEventListener('click', () => handleCompClick(c));
+    layer.appendChild(div);
+  });
+}
+
+function buildShape(c) {
+  const tip = `<div class="tip">${c.name}</div>`;
+  switch(c.shape) {
+    case 'cpu':
+      return `<div class="shape-cpu"><div class="cpu-inner"></div><div class="cpu-triangle"></div><div class="cpu-label">LGA1700</div></div>${tip}`;
+    case 'vrm':
+      return `<div style="display:flex;flex-direction:column;gap:4px;padding:4px 6px;background:rgba(0,0,0,.3);border-radius:2px;">
+        ${Array(8).fill(0).map((_,i)=>`<div class="shape-vrm" style="width:${c.w-12}px;height:14px;position:relative;"><div style="position:absolute;right:-8px;top:3px;width:6px;height:6px;border-radius:50%;background:radial-gradient(#2a5a2a,#0d1a0d);border:1px solid #1a3a1a;"></div></div>`).join('')}
+      </div>${tip}`;
+    case 'cpu8pin':
+      return `<div class="shape-8pin">${Array(8).fill('<div class="pin-hole"></div>').join('')}</div>${tip}`;
+    case 'ramgroup':
+      return `<div style="display:flex;gap:13px;height:100%;">
+        <div class="shape-dimm a1"></div>
+        <div class="shape-dimm a2"></div>
+        <div class="shape-dimm b1"></div>
+        <div class="shape-dimm b2"></div>
+      </div>${tip}`;
+    case 'atx24':
+      return `<div class="shape-atx">${Array(24).fill('<div class="pin-hole"></div>').join('')}</div>${tip}`;
+    case 'pciex16':
+      return `<div class="shape-pcie x16" style="width:100%;height:100%"><div class="pcie-latch gold"></div></div>${tip}`;
+    case 'pciex1':
+      return `<div class="shape-pcie x1" style="width:100%;height:100%"></div>${tip}`;
+    case 'pciex16s':
+      return `<div class="shape-pcie x16" style="width:100%;height:100%;border-color:#666;box-shadow:none"><div class="pcie-latch" style="background:#555"></div></div>${tip}`;
+    case 'm2': case 'm2b':
+      return `<div class="shape-m2" style="width:100%;height:100%"></div>${tip}`;
+    case 'satagroup':
+      const sataCount = 6;
+      return `<div style="display:flex;flex-direction:column;gap:5px;">
+        ${Array(sataCount).fill(0).map((_,i)=>`<div class="shape-sata" style="position:relative;">
+          <span style="position:absolute;top:-12px;left:0;font-family:'Share Tech Mono',monospace;font-size:6px;color:var(--trace-b)">${i}</span>
+        </div>`).join('')}
+      </div>${tip}`;
+    case 'chipset':
+      return `<div class="shape-chipset"><div class="chipset-inner"></div>
+        <div class="chipset-pins top"></div><div class="chipset-pins"></div>
+        <div class="chipset-pins left"></div><div class="chipset-pins right"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;">
+          <span style="font-family:'Share Tech Mono',monospace;font-size:7px;color:#888;text-align:center;line-height:1.3;">INTEL<br>Z790<br>PCH</span>
+        </div>
+      </div>${tip}`;
+    case 'cmos':
+      return `<div class="shape-cmos"><div class="cmos-plus">+</div><div class="cmos-text">CR2032</div></div>${tip}`;
+    case 'bios':
+      return `<div class="shape-bios"><div class="bios-pins-l"></div><div class="bios-pins-r"></div><div class="bios-dot"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+          <span style="font-family:'Share Tech Mono',monospace;font-size:7px;color:#666;text-align:center;line-height:1.2;">UEFI<br>ROM</span>
+        </div>
+      </div>${tip}`;
+    case 'fanheader':
+      return `<div class="shape-fan"><div class="fan-pin"></div><div class="fan-pin"></div><div class="fan-pin"></div><div class="fan-pin"></div></div>${tip}`;
+    case 'fpanel':
+      return `<div class="shape-fp" style="grid-template-columns:repeat(10,1fr);">
+        ${Array(20).fill(0).map((_,i)=>`<div style="background:${i%2===0?'var(--trace-b)':'#111'};border:1px solid #333;border-radius:1px;"></div>`).join('')}
+      </div>${tip}`;
+    case 'usb3header':
+      return `<div class="shape-usb3">${Array(10).fill('<div class="usb-pin"></div>').join('')}</div>${tip}`;
+    case 'audioheader':
+      return `<div class="shape-audio">${Array(10).fill('<div class="audio-pin"></div>').join('')}</div>${tip}`;
+    case 'io':
+      return `<div class="shape-io">
+        <div class="io-port" style="height:26px;background:#0a0510;border-color:#3a1a5a;"></div>
+        <div class="io-port usb-a"></div><div class="io-port usb-a"></div>
+        <div class="io-port usb-c"></div>
+        <div class="io-port lan"></div>
+        <div class="io-port audio"></div><div class="io-port audio"></div>
+        <div class="io-port dp"></div><div class="io-port hdmi"></div>
+      </div>${tip}`;
+    case 'capacitors':
+      return `<div style="display:flex;flex-wrap:wrap;gap:3px;padding:3px;align-items:flex-end;">
+        ${[18,22,14,20,16,18].map(h=>`<div style="width:8px;height:${h}px;background:linear-gradient(180deg,#c0392b,#922b21);border-radius:3px 3px 1px 1px;border:1px solid #7b241c;position:relative;">
+          <div style="position:absolute;top:1px;left:50%;transform:translateX(-50%);width:4px;height:2px;background:#e8daef;border-radius:1px;"></div>
+        </div>`).join('')}
+      </div>${tip}`;
+    case 'inductors':
+      return `<div style="display:flex;flex-wrap:wrap;gap:4px;padding:4px;">
+        ${[0,1,2,3].map(i=>`<div style="width:22px;height:18px;background:linear-gradient(135deg,#6c3483,#4a235a);border-radius:2px;border:1px solid #8e44ad;display:flex;align-items:center;justify-content:center;">
+          <div style="width:14px;height:10px;border:2px solid #d7bde2;border-radius:50%;"></div>
+        </div>`).join('')}
+      </div>${tip}`;
+    case 'vrm_heatsink':
+      return `<div style="width:100%;height:100%;background:linear-gradient(180deg,#aab7c4,#7f8c8d,#aab7c4);border-radius:3px;position:relative;display:flex;align-items:stretch;overflow:hidden;">
+        ${Array(8).fill(0).map((_,i)=>`<div style="flex:1;background:${i%2===0?'#95a5a6':'#7f8c8d'};border-right:1px solid #5d6d7e;"></div>`).join('')}
+        <div style="position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-family:'Share Tech Mono',monospace;font-size:6px;color:#2c3e50;white-space:nowrap;">VRM HS</div>
+      </div>${tip}`;
+    case 'rgb_header':
+      return `<div style="background:linear-gradient(90deg,#e74c3c,#f39c12,#2ecc71,#3498db,#9b59b6);padding:2px;border-radius:3px;">
+        <div style="display:flex;gap:2px;background:#111;padding:3px;border-radius:2px;">
+          ${Array(3).fill(0).map(()=>`<div style="width:6px;height:14px;background:radial-gradient(#ffd700,#b8860b);border-radius:1px;"></div>`).join('')}
+        </div>
+      </div>${tip}`;
+    case 'debug_led':
+      return `<div style="background:#0a0a0a;border:1px solid #c0392b;border-radius:3px;padding:3px;display:flex;align-items:center;justify-content:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#e74c3c;text-shadow:0 0 8px #e74c3c;letter-spacing:2px;">A2</div>
+      </div>${tip}`;
+    case 'northbridge':
+      return `<div class="shape-chipset" style="border-color:#E67E22;box-shadow:0 0 10px rgba(230,126,34,.3);">
+        <div class="chipset-inner" style="background:radial-gradient(circle at 30% 30%,#784212,#4a2706);"></div>
+        <div class="chipset-pins top"></div><div class="chipset-pins"></div>
+        <div class="chipset-pins left"></div><div class="chipset-pins right"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;">
+          <span style="font-family:'Share Tech Mono',monospace;font-size:7px;color:#E67E22;text-align:center;line-height:1.3;">NORTH<br>BRIDGE<br><span style="font-size:5px;color:#888">(LEGACY)</span></span>
+        </div>
+      </div>${tip}`;
+    case 'southbridge':
+      return `<div class="shape-chipset" style="border-color:#27AE60;box-shadow:0 0 10px rgba(39,174,96,.3);">
+        <div class="chipset-inner" style="background:radial-gradient(circle at 30% 30%,#1e8449,#0b5329);"></div>
+        <div class="chipset-pins top"></div><div class="chipset-pins"></div>
+        <div class="chipset-pins left"></div><div class="chipset-pins right"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;">
+          <span style="font-family:'Share Tech Mono',monospace;font-size:7px;color:#27AE60;text-align:center;line-height:1.3;">SOUTH<br>BRIDGE<br><span style="font-size:5px;color:#888">(PCH)</span></span>
+        </div>
+      </div>${tip}`;
+    default:
+      return `<div style="width:100%;height:100%;background:#111;border:1px solid #444;"></div>${tip}`;
+  }
+}
+
+// I/O panel (static, edge of board)
+function buildIOPanel() {
+  const div = document.createElement('div');
+  div.className = 'comp hov-glow';
+  div.id = 'comp_io';
+  div.style.cssText = 'left:0px;top:0px;width:58px;height:224px;z-index:10;';
+  const tip = `<div class="tip" style="left:60px;top:10px;">I/O Panel (Back Ports)</div>`;
+  div.innerHTML = `<div class="shape-io">
+    <div class="io-port" style="height:26px;background:#0a0510;border-color:#3a1a5a;"></div>
+    <div class="io-port usb-a"></div><div class="io-port usb-a"></div>
+    <div class="io-port usb-c"></div>
+    <div class="io-port lan"></div>
+    <div class="io-port audio"></div><div class="io-port audio"></div>
+    <div class="io-port dp"></div><div class="io-port hdmi"></div>
+  </div>${tip}`;
+  
+  const ioComp = {
+    id:'io', name:'I/O Panel (Back Ports)', fullName:'Rear I/O Port Cluster',
+    cat:'I/O Connectors',
+    desc:'The rear I/O panel contains all the ports accessible from the back of your PC case — USB ports, HDMI/DisplayPort for video output (if CPU has integrated graphics), ethernet for internet, and audio jacks for speakers/headphones.',
+    fns:[
+      'Provides USB-A and USB-C ports for mice, keyboards, external drives, etc.',
+      'Ethernet (LAN) port for wired internet connection at up to 2.5 Gbps',
+      'Audio jacks for 5.1/7.1 surround sound, headphones, and microphones',
+      'DisplayPort/HDMI for video output using CPU integrated graphics (if available)'
+    ],
+    fact:'The rear I/O shield (the metal plate around these ports) is installed in the case first. It snaps in and protects the ports — and also grounds them against static!',
+    navColor:'#888'
+  };
+  div.addEventListener('click', () => handleCompClick(ioComp));
+  document.getElementById('compLayer').appendChild(div);
+}
+
+// ═══════════════════════════════════════════════════════
+//  LEARN MODE
+// ═══════════════════════════════════════════════════════
+let currentComp = null;
+let currentMode = 'learn';
+
+function handleCompClick(comp) {
+  if (currentMode === 'quiz' && quizState.waitingClick) {
+    handleQuizClick(comp.id);
+    return;
+  }
+  if (currentMode !== 'learn') return;
+  showCompDetail(comp);
+}
+
+function showCompDetail(comp) {
+  // Remove active from all
+  document.querySelectorAll('.comp').forEach(el => el.classList.remove('active-comp'));
+  // Add to clicked
+  const el = document.getElementById('comp_'+comp.id);
+  if (el) el.classList.add('active-comp');
+
+  currentComp = comp;
+  document.getElementById('welcomeState').style.display = 'none';
+  document.getElementById('compDetail').classList.add('show');
+
+  document.getElementById('cdName').textContent = comp.fullName || comp.name;
+  document.getElementById('cdCat').textContent = comp.cat;
+  document.getElementById('cdDesc').textContent = comp.desc;
+  document.getElementById('cdFact').textContent = comp.fact;
+
+  const fnDiv = document.getElementById('cdFunctions');
+  fnDiv.innerHTML = comp.fns.map(f => `
+    <div class="fn-item">
+      <div class="fn-dot"></div>
+      <div class="fn-txt">${f}</div>
+    </div>`).join('');
+
+  buildNavList(comp.id);
+}
+
+function buildNavList(activeId) {
+  const all = [...COMPS, {id:'io',name:'I/O Panel (Back Ports)',navColor:'#888'}];
+  document.getElementById('navList').innerHTML = all.map(c => `
+    <div class="nav-item${c.id===activeId?' active':''}" onclick="selectByNav('${c.id}')">
+      <div class="nav-dot" style="background:${c.navColor};box-shadow:0 0 4px ${c.navColor}40"></div>
+      ${c.name}
+    </div>`).join('');
+}
+
+function selectByNav(id) {
+  const comp = COMPS.find(c=>c.id===id);
+  if (comp) showCompDetail(comp);
+  else if (id==='io') {
+    // io panel
+    const ioComp = {
+      id:'io', name:'I/O Panel (Back Ports)', fullName:'Rear I/O Port Cluster',
+      cat:'I/O Connectors', navColor:'#888',
+      desc:'The rear I/O panel contains all the ports accessible from the back of your PC case — USB ports, HDMI/DisplayPort for video output (if CPU has integrated graphics), ethernet for internet, and audio jacks for speakers/headphones.',
+      fns:['Provides USB-A and USB-C ports for mice, keyboards, external drives, etc.',
+        'Ethernet (LAN) port for wired internet connection at up to 2.5 Gbps',
+        'Audio jacks for 5.1/7.1 surround sound, headphones, and microphones',
+        'DisplayPort/HDMI for video output using CPU integrated graphics (if available)'],
+      fact:'The rear I/O shield (the metal plate around these ports) is installed in the case first. It snaps in and protects the ports — and also grounds them against static!'
+    };
+    showCompDetail(ioComp);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  MODE SWITCHING
+// ═══════════════════════════════════════════════════════
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('btnLearn').classList.toggle('active', mode==='learn');
+  document.getElementById('btnQuiz').classList.toggle('active', mode==='quiz');
+  document.getElementById('learnPanel').style.display = mode==='learn'?'flex':'none';
+  document.getElementById('quizPanel').style.display = mode==='quiz'?'flex':'none';
+  document.getElementById('quizPanel').classList.toggle('show', mode==='quiz');
+
+  // Reset board
+  document.querySelectorAll('.comp').forEach(el => {
+    el.classList.remove('active-comp','quiz-target','flash-ok','flash-bad');
+  });
+  if (mode==='quiz') {
+    resetQuiz();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  QUIZ SYSTEM
+// ═══════════════════════════════════════════════════════
+let selectedQuizType = 'mixed';
+let quizState = {
+  questions: [],
+  current: 0,
+  score: 0,
+  streak: 0,
+  answered: false,
+  waitingClick: false
+};
+
+function selectQuizType(el, type) {
+  document.querySelectorAll('.qt-opt').forEach(o => o.classList.remove('sel'));
+  el.classList.add('sel');
+  selectedQuizType = type;
+}
+
+function generateQuestions(type) {
+  const pool = [...COMPS]; // all 17 components
+  // Shuffle
+  const shuffled = pool.sort(() => Math.random()-.5);
+  
+  const questions = [];
+  const total = 15;
+
+  for (let i = 0; i < total; i++) {
+    const comp = shuffled[i % shuffled.length];
+    let qType;
+    if (type === 'mixed') {
+      const types = ['identify','locate','function'];
+      qType = types[i % 3];
+    } else {
+      qType = type;
+    }
+    questions.push(makeQuestion(qType, comp, pool));
+  }
+  return questions;
+}
+
+function makeQuestion(type, comp, pool) {
+  const others = pool.filter(c => c.id !== comp.id);
+  const shuffle4 = (arr) => arr.sort(() => Math.random()-.5).slice(0,3);
+
+  if (type === 'identify') {
+    const wrong = shuffle4(others).map(c => c.name);
+    const options = [...wrong, comp.name].sort(() => Math.random()-.5);
+    return {
+      type: 'identify',
+      text: `What is this component highlighted on the motherboard?`,
+      targetId: comp.id,
+      answer: comp.name,
+      options,
+      feedback: `✅ Correct! The highlighted component is the <strong>${comp.fullName || comp.name}</strong>. ${comp.desc.substring(0,120)}...`
+    };
+  }
+  if (type === 'locate') {
+    return {
+      type: 'locate',
+      text: `Click on the <strong style="color:var(--gold)">${comp.name}</strong> on the motherboard.`,
+      targetId: comp.id,
+      answer: comp.id,
+      options: null,
+      feedback: `✅ Correct! You found the <strong>${comp.name}</strong>. ${comp.fns[0]}`
+    };
+  }
+  if (type === 'function') {
+    const correctFn = comp.fns[0];
+    const wrongFns = shuffle4(others).map(c => c.fns[0]);
+    const options = [...wrongFns, correctFn].sort(() => Math.random()-.5);
+    return {
+      type: 'function',
+      text: `What is the primary role of the <strong style="color:var(--gold)">${comp.name}</strong>?`,
+      targetId: null,
+      answer: correctFn,
+      options,
+      feedback: `✅ Correct! The ${comp.name}: <em>${correctFn}</em>`
+    };
+  }
+}
+
+function startQuiz() {
+  quizState.questions = generateQuestions(selectedQuizType);
+  quizState.current = 0;
+  quizState.score = 0;
+  quizState.streak = 0;
+  quizState.answered = false;
+  quizState.waitingClick = false;
+
+  document.getElementById('quizStart').style.display = 'none';
+  document.getElementById('quizActive').classList.add('show');
+  document.getElementById('quizDone').classList.remove('show');
+
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const q = quizState.questions[quizState.current];
+  const total = quizState.questions.length;
+  
+  // Stats
+  document.getElementById('qScore').textContent = quizState.score;
+  document.getElementById('qNum').textContent = `${quizState.current+1}/${total}`;
+  document.getElementById('qStreak').textContent = `🔥 ${quizState.streak}`;
+  document.getElementById('qpBarFill').style.width = `${(quizState.current/total)*100}%`;
+
+  // Clear board highlights
+  document.querySelectorAll('.comp').forEach(el => el.classList.remove('quiz-target','flash-ok','flash-bad'));
+
+  // Highlight target for identify questions
+  if (q.type === 'identify' && q.targetId) {
+    const el = document.getElementById('comp_'+q.targetId);
+    if (el) el.classList.add('quiz-target');
+  }
+
+  // Badge
+  const badges = {identify:'👁️ IDENTIFY', locate:'📍 LOCATE', function:'⚙️ FUNCTION'};
+  document.getElementById('qBadge').textContent = badges[q.type];
+
+  // Question text
+  document.getElementById('qText').innerHTML = q.text;
+
+  // Options
+  const optsDiv = document.getElementById('qOpts');
+  const clickHint = document.getElementById('qClickHint');
+  
+  if (q.type === 'locate') {
+    optsDiv.innerHTML = '';
+    clickHint.style.display = 'block';
+    quizState.waitingClick = true;
+  } else {
+    clickHint.style.display = 'none';
+    quizState.waitingClick = false;
+    optsDiv.innerHTML = q.options.map((opt, i) => `
+      <button class="q-opt" onclick="answerMC(${i})" data-opt="${i}">${opt}</button>
+    `).join('');
+  }
+
+  // Feedback
+  const fb = document.getElementById('qFeedback');
+  fb.className = 'q-feedback';
+  fb.style.display = 'none';
+
+  // Next btn
+  document.getElementById('qNextBtn').classList.remove('show');
+  quizState.answered = false;
+}
+
+function answerMC(idx) {
+  if (quizState.answered) return;
+  quizState.answered = true;
+  
+  const q = quizState.questions[quizState.current];
+  const chosen = q.options[idx];
+  const correct = chosen === q.answer;
+
+  document.querySelectorAll('.q-opt').forEach((btn, i) => {
+    btn.disabled = true;
+    if (q.options[i] === q.answer) btn.classList.add('ok');
+    else if (i === idx && !correct) btn.classList.add('bad');
+  });
+
+  handleResult(correct, q);
+}
+
+function handleQuizClick(compId) {
+  if (quizState.answered) return;
+  quizState.answered = true;
+  quizState.waitingClick = false;
+
+  const q = quizState.questions[quizState.current];
+  const correct = compId === q.targetId;
+
+  const clickedEl = document.getElementById('comp_'+compId);
+  const targetEl = document.getElementById('comp_'+q.targetId);
+
+  if (clickedEl) clickedEl.classList.add(correct?'flash-ok':'flash-bad');
+  if (!correct && targetEl) {
+    setTimeout(()=>targetEl.classList.add('flash-ok'), 200);
+  }
+
+  document.getElementById('qClickHint').style.display = 'none';
+  handleResult(correct, q);
+}
+
+function handleResult(correct, q) {
+  if (correct) {
+    quizState.score++;
+    quizState.streak++;
+  } else {
+    quizState.streak = 0;
+  }
+
+  document.getElementById('qScore').textContent = quizState.score;
+  document.getElementById('qStreak').textContent = `🔥 ${quizState.streak}`;
+
+  const fb = document.getElementById('qFeedback');
+  if (correct) {
+    fb.className = 'q-feedback ok';
+    fb.innerHTML = q.feedback;
+  } else {
+    fb.className = 'q-feedback bad';
+    const target = COMPS.find(c=>c.id===q.targetId);
+    fb.innerHTML = `❌ Not quite! ${q.type==='locate'?`The correct answer was the <strong>${target?.name}</strong>.`:`The correct answer was: <strong>${q.answer}</strong>`}`;
+  }
+  fb.style.display = 'block';
+
+  document.getElementById('qNextBtn').classList.add('show');
+}
+
+function nextQuestion() {
+  quizState.current++;
+  if (quizState.current >= quizState.questions.length) {
+    showQuizDone();
+  } else {
+    renderQuestion();
+  }
+}
+
+function showQuizDone() {
+  document.querySelectorAll('.comp').forEach(el=>el.classList.remove('quiz-target','flash-ok','flash-bad'));
+  document.getElementById('quizActive').classList.remove('show');
+  document.getElementById('quizDone').classList.add('show');
+  
+  const score = quizState.score;
+  const total = quizState.questions.length;
+  document.getElementById('doneScore').textContent = `${score}/${total}`;
+  document.getElementById('qpBarFill').style.width = '100%';
+  document.getElementById('qNum').textContent = `${total}/${total}`;
+
+  const pct = score/total;
+  let msg;
+  if (pct >= 0.93) msg = "🏆 Outstanding! You clearly know your motherboard components like a pro. Ready to build a real PC!";
+  else if (pct >= 0.80) msg = "🎉 Great job! You have a solid understanding. Review the components you missed and try again!";
+  else if (pct >= 0.60) msg = "👍 Good progress! A few more study sessions and you'll ace your viva. Focus on the ones you got wrong.";
+  else if (pct >= 0.40) msg = "📚 Keep studying! Go back to Learn mode, click each component, and read carefully. You'll get there!";
+  else msg = "💡 Don't worry — everyone starts somewhere! Spend some time in Learn mode, then try the quiz again.";
+  
+  document.getElementById('doneMsg').textContent = msg;
+}
+
+function resetQuiz() {
+  document.querySelectorAll('.comp').forEach(el=>el.classList.remove('quiz-target','flash-ok','flash-bad'));
+  quizState = {questions:[],current:0,score:0,streak:0,answered:false,waitingClick:false};
+  
+  document.getElementById('quizStart').style.display = 'flex';
+  document.getElementById('quizActive').classList.remove('show');
+  document.getElementById('quizDone').classList.remove('show');
+  document.getElementById('qpBarFill').style.width='0%';
+  document.getElementById('qScore').textContent='0';
+  document.getElementById('qNum').textContent='0/0';
+  document.getElementById('qStreak').textContent='🔥 0';
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+buildBoard();
+buildIOPanel();
+
+// Start in learn mode
+document.getElementById('learnPanel').style.display = 'flex';
+document.getElementById('quizPanel').style.display = 'none';
+
+// Count badge
+document.getElementById('compCountBadge').textContent = `${COMPS.length + 1} Components to Explore`;
+
+// Build default nav list
+buildNavList(null);
+</script>
+</body>
+</html>
